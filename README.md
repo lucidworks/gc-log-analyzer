@@ -15,17 +15,19 @@ mvn clean package
 
 2) Enable the following flags on the Java process you want to analyze logs for:
 
+```
 -verbose:gc -XX:+PrintHeapAtGC -XX:+PrintGCDetails -XX:+PrintGCCause \
 -XX:+PrintGCDateStamps -XX:+PrintGCTimeStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime \
 -XX:+UseConcMarkSweepGC \
 -XX:+UseParNewGC \
 -Xloggc:/var/solr/logs/solr_gc.log
+```
 
-The -Xloggc setting sets the location where Java will write the GC log, please update that parameter for your system;
+The `-Xloggc` setting sets the location where Java will write the GC log, please update that parameter for your system;
 you'll need to pass the path to this file when invoking the analyzer in step 4 below.
 
 Currently, the parser only works with the CMS and ParNew collectors on Java 7 or 8, consequently, you can only
-analyze logs for JVMs run with these flags set: -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
+analyze logs for JVMs run with these flags set: `-XX:+UseConcMarkSweepGC -XX:+UseParNewGC`
 
 NOTE: Support for G1 is under-construction and will be added in the future.
 
