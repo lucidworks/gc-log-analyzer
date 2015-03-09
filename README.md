@@ -32,6 +32,41 @@ analyze logs for JVMs run with these flags set: `-XX:+UseConcMarkSweepGC -XX:+Us
 
 NOTE: Support for G1 is under-construction and will be added in the future.
 
+FWIW, here are the full GC tuning settings I'm using successfully to support complex faceting / sorting queries in Solr:
+
+```
+-Djava.net.preferIPv4Stack=true \
+-Duser.timezone=UTC \
+-Xloggc:/var/solr/logs/solr_gc.log \
+-XX:+PrintGCApplicationStoppedTime \
+-XX:+PrintTenuringDistribution \
+-XX:+PrintGCDateStamps \
+-XX:+PrintGCCause \
+-XX:+PrintGCDetails \
+-XX:+PrintHeapAtGC \
+-verbose:gc \
+-XX:CMSTriggerPermRatio=80 \
+-XX:CMSFullGCsBeforeCompaction=1 \
+-XX:+ParallelRefProcEnabled \
+-XX:+CMSParallelRemarkEnabled \
+-XX:CMSMaxAbortablePrecleanTime=6000 \
+-XX:CMSInitiatingOccupancyFraction=50 \
+-XX:+UseCMSInitiatingOccupancyOnly \
+-XX:PretenureSizeThreshold=64m \
+-XX:+CMSScavengeBeforeRemark \
+-XX:ParallelGCThreads=6 \
+-XX:ConcGCThreads=6 \
+-XX:+UseParNewGC \
+-XX:+UseConcMarkSweepGC \
+-XX:MaxTenuringThreshold=8 \
+-XX:TargetSurvivorRatio=90 \
+-XX:SurvivorRatio=4 \
+-XX:NewRatio=2 \
+-Xmx12g \
+-Xms12g \
+-Xss256k
+```
+
 3) Optionally, setup a SolrCloud collection to index GC event data for deeper analysis with Fusion/Banana.
 
 4) Run the GC log analyzer command-line application in tail mode and send events into Solr:
