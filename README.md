@@ -17,7 +17,8 @@ mvn clean package
 
 ```
 -verbose:gc -XX:+PrintHeapAtGC -XX:+PrintGCDetails -XX:+PrintGCCause \
--XX:+PrintGCDateStamps -XX:+PrintGCTimeStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime \
+-XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution \
+-XX:+PrintGCApplicationStoppedTime \
 -XX:+UseConcMarkSweepGC \
 -XX:+UseParNewGC \
 -Xloggc:/var/solr/logs/solr_gc.log
