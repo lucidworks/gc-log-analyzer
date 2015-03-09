@@ -7,6 +7,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.io.input.TailerListenerAdapter;
 import org.apache.http.NoHttpResponseException;
 import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.log4j.Logger;
@@ -23,8 +24,11 @@ import java.net.ConnectException;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.solr.client.solrj.impl.CloudSolrServer;
@@ -32,6 +36,8 @@ import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.ModifiableSolrParams;
+
+import org.apache.commons.io.input.Tailer;
 
 /**
  * Command-line utility for analyzing a GC log, and optionally sending GC events into a Solr collection for
@@ -94,7 +100,11 @@ public class GCLogAnalyzer {
         .hasArg()
         .isRequired(false)
         .withDescription("Name of collection to send GC log events to for analysis; no default")
-        .create("collection")
+        .create("collection"),
+      OptionBuilder
+        .isRequired(false)
+        .withDescription("Flag to indicate this app should tail the provided log file; only valid if using the -log option")
+        .create("tail")
     };
   }
 
@@ -176,26 +186,76 @@ public class GCLogAnalyzer {
       if (!logFile.isFile())
         throw new FileNotFoundException("GC log file " + logFile.getAbsolutePath() + " not found!");
 
-      GCLog gcLog = parseGCLogFile(cli, logFile);
+      if (cli.hasOption("tail")) {
+        // user has requested us to tail a GC log file
+        GCLogTailer tailerListener = new GCLogTailer(cloudSolrServer);
+        GCLog gcLog = newGCLogInstance(cli, logFile.getName(), tailerListener);
+        Tailer tailer = new Tailer(logFile, tailerListener, 1000);
+        Thread thread = new Thread(tailer);
+        thread.setDaemon(true);
+        thread.start(); // start queuing events
 
-      if (cloudSolrServer != null)
-        indexGCLog(cloudSolrServer, gcLog);
+        // app blocks here indefinitely
+        gcLog.parse(tailerListener.queue);
 
-      gcLogs.add(gcLog);
+      } else {
+        GCLog gcLog = parseGCLogFile(cli, logFile);
+
+        if (cloudSolrServer != null)
+          indexGCLog(cloudSolrServer, gcLog);
+
+        gcLogs.add(gcLog);
+      }
+
     }
 
     return gcLogs;
   }
 
-  public GCLog parseGCLogFile(CommandLine cli, File logFile) throws Exception {
-    log.info("Parsing GC log file: " + logFile.getName());
+  public class GCLogTailer extends TailerListenerAdapter implements GCLog.GCEventListener {
 
+    CloudSolrServer cloudSolrServer;
+    LinkedBlockingQueue<String> queue;
+
+    GCLogTailer(CloudSolrServer cloudSolrServer) {
+      super();
+      this.cloudSolrServer = cloudSolrServer;
+      this.queue = new LinkedBlockingQueue<String>(1000);
+    }
+
+    public void handle(String line) {
+      try {
+        queue.offer(line, 10, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        Thread.interrupted();
+        log.error(e);
+      }
+    }
+
+    public void onEventParsed(GCLog gcLog, GCLog.GCEvent event) {
+      if (cloudSolrServer != null) {
+        try {
+          sendBatch(cloudSolrServer, Collections.singletonList(toDoc(gcLog, event)), 2, 2);
+        } catch (Exception exc) {
+          log.error("Failed to index GC event '"+event+"' into Solr due to: "+exc, exc);
+        }
+      } else {
+        log.info("log tailer: "+event);
+      }
+    }
+  }
+
+  public GCLog newGCLogInstance(CommandLine cli, String fileName, GCLog.GCEventListener eventListener) {
     String hostAndPort = cli.getOptionValue("javaHostAndPort");
     int javaPid = Integer.parseInt(cli.getOptionValue("javaPid"));
     String javaVers = cli.getOptionValue("javaVers");
     String javaGC = cli.getOptionValue("javaGC", "CMS");
+    return new GCLog(hostAndPort, javaPid, javaVers, javaGC, fileName, eventListener);
+  }
 
-    GCLog gcLog = new GCLog(hostAndPort, javaPid, javaVers, javaGC, logFile.getName());
+  public GCLog parseGCLogFile(CommandLine cli, File logFile) throws Exception {
+    log.info("Parsing GC log file: " + logFile.getName());
+    GCLog gcLog = newGCLogInstance(cli, logFile.getName(), null);
 
     // parse the log one-by-one to generate a List of GCEvent objects
     LineNumberReader br = null;

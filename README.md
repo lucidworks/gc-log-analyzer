@@ -1,2 +1,58 @@
-# gc-log-analyzer
+Java GC Log Analyzer
+========
+
 Java GC log parser / analyzer for Java 7 and 8
+
+
+Getting Started
+========
+
+1) Build the project using Maven:
+
+```
+mvn clean package
+```
+
+2) Enable the following flags on the Java process you want to analyze logs for:
+
+-verbose:gc -XX:+PrintHeapAtGC -XX:+PrintGCDetails -XX:+PrintGCCause \
+-XX:+PrintGCDateStamps -XX:+PrintGCTimeStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime \
+-XX:+UseConcMarkSweepGC \
+-XX:+UseParNewGC \
+-Xloggc:/var/solr/logs/solr_gc.log
+
+The -Xloggc setting sets the location where Java will write the GC log, please update that parameter for your system;
+you'll need to pass the path to this file when invoking the analyzer in step 4 below.
+
+Currently, the parser only works with the CMS and ParNew collectors on Java 7 or 8, consequently, you can only
+analyze logs for JVMs run with these flags set: -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
+
+NOTE: Support for G1 is under-construction and will be added in the future.
+
+3) Optionally, setup a SolrCloud collection to index GC event data for deeper analysis with Fusion/Banana.
+
+4) Run the GC log analyzer command-line application in tail mode and send events into Solr:
+
+```
+java -jar target/gc-log-analyzer-0.1-exe.jar \
+  -tail \
+  -log /var/solr/logs/solr_gc.log \
+  -javaHostAndPort localhost:8983 \
+  -javaPid 1234 \
+  -javaVers 1.7 \
+  -zkHost localhost:2181 \
+  -collection my_gc_logs
+```
+
+Notice that you need to pass some basic information about the JVM process that created the log. This information is
+simply passed through in the docs sent to Solr so you can keep track of your GC logs on multiple machines in a cluster.
+
+For more information about all the command-line options, simply do:
+
+```
+java -jar target/gc-log-analyzer-0.1-exe.jar -help
+```
+
+Please send any questions you have about this application to tim.potter@lucidworks.com
+
+Happy GC tuning!
