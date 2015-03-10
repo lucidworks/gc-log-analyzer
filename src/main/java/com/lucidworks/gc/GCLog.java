@@ -60,7 +60,7 @@ public class GCLog {
     Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}\\:\\d{2}\\:\\d{2}\\.\\d{3}[\\+|-]\\d{4}");
 
   private static final String STOPPED_MSG = "Total time for which application threads were stopped";
-  private static final String APP_THREADS_STOPPED = "AppThreadsStopped";
+  public static final String APP_THREADS_STOPPED = "AppThreadsStopped";
   private static final String CMF = "concurrent mode failure";
 
   private static final double round(final double d) {
@@ -501,6 +501,10 @@ public class GCLog {
       event.durationSecs = Double.parseDouble(tmp.substring(0,at).trim());
 
       events.add(event);
+
+      if (eventListener != null)
+        eventListener.onEventParsed(this, event);
+
     } catch (Exception exc) {
       log.error("Failed to parse application stopped time event '"+
         line+"' at line "+lineNum+" in "+fileName+" due to: "+exc, exc);

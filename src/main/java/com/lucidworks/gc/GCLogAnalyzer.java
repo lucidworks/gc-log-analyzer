@@ -24,7 +24,6 @@ import java.net.ConnectException;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -102,6 +101,12 @@ public class GCLogAnalyzer {
         .withDescription("Name of collection to send GC log events to for analysis; no default")
         .create("collection"),
       OptionBuilder
+        .withArgName("SECS")
+        .hasArg()
+        .isRequired(false)
+        .withDescription("Don't index an event if its duration is less than this value, e.g. 0.2 (200ms); no default, all events are indexed")
+        .create("eventDurationSecsThreshold"),
+      OptionBuilder
         .isRequired(false)
         .withDescription("Flag to indicate this app should tail the provided log file; only valid if using the -log option")
         .create("tail")
@@ -119,6 +124,8 @@ public class GCLogAnalyzer {
     (new GCLogAnalyzer()).run(processCommandLineArgs(opts, args));
   }
 
+  private Double eventDurationSecsThreshold = null; // no filtering
+
   /**
    * Parses a GC log (-log) or directory containing GC logs (-dir).
    */
@@ -130,6 +137,12 @@ public class GCLogAnalyzer {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(GCLogAnalyzer.class.getName(), getOptions());
       System.exit(1);
+    }
+
+    if (cli.hasOption("eventDurationSecsThreshold")) {
+      eventDurationSecsThreshold =
+        new Double(cli.getOptionValue("eventDurationSecsThreshold"));
+      log.info("Events with duration less than "+eventDurationSecsThreshold+" secs will not be indexed in Solr.");
     }
 
     String collection = cli.getOptionValue("collection");
@@ -214,13 +227,20 @@ public class GCLogAnalyzer {
 
   public class GCLogTailer extends TailerListenerAdapter implements GCLog.GCEventListener {
 
-    CloudSolrServer cloudSolrServer;
+    SolrIndexerThread indexerThread;
     LinkedBlockingQueue<String> queue;
+    LinkedBlockingQueue<SolrInputDocument> docQueue;
 
     GCLogTailer(CloudSolrServer cloudSolrServer) {
       super();
-      this.cloudSolrServer = cloudSolrServer;
+
       this.queue = new LinkedBlockingQueue<String>(1000);
+      this.docQueue = new LinkedBlockingQueue<SolrInputDocument>(1000);
+
+      if (cloudSolrServer != null) {
+        indexerThread = new SolrIndexerThread(cloudSolrServer, docQueue, 20);
+        indexerThread.start();
+      }
     }
 
     public void handle(String line) {
@@ -233,14 +253,20 @@ public class GCLogAnalyzer {
     }
 
     public void onEventParsed(GCLog gcLog, GCLog.GCEvent event) {
-      if (cloudSolrServer != null) {
+      if (indexerThread != null) {
+        if (!event.isFull && event.durationSecs < eventDurationSecsThreshold.doubleValue()) {
+          // to avoid so many log entries, filter out brief JVM overhead events
+          // all full GC events are indexed regardless of this filter
+          return;
+        }
+
         try {
-          sendBatch(cloudSolrServer, Collections.singletonList(toDoc(gcLog, event)), 2, 2);
+          docQueue.offer(toDoc(gcLog, event), 5, TimeUnit.SECONDS);
         } catch (Exception exc) {
           log.error("Failed to index GC event '"+event+"' into Solr due to: "+exc, exc);
         }
       } else {
-        log.info("log tailer: "+event);
+        log.info(String.valueOf(event));
       }
     }
   }
@@ -353,6 +379,7 @@ public class GCLogAnalyzer {
 
   protected int sendBatch(CloudSolrServer cloudSolrServer, List<SolrInputDocument> batch, int waitBeforeRetry, int maxRetries) throws Exception {
     int sent = 0;
+    long startMs = System.currentTimeMillis();
     try {
       UpdateRequest updateRequest = new UpdateRequest();
       ModifiableSolrParams params = updateRequest.getParams();
@@ -363,6 +390,10 @@ public class GCLogAnalyzer {
       updateRequest.add(batch);
       cloudSolrServer.request(updateRequest);
       sent = batch.size();
+
+      long tookMs = System.currentTimeMillis() - startMs;
+      log.info("Send batch of "+sent+" docs to Solr took "+(tookMs)+" (ms)");
+
     } catch (Exception exc) {
 
       Throwable rootCause = SolrException.getRootCause(exc);
@@ -387,6 +418,46 @@ public class GCLogAnalyzer {
     batch.clear();
 
     return sent;
+  }
+
+  class SolrIndexerThread extends Thread {
+
+    CloudSolrServer cloudSolrServer;
+    LinkedBlockingQueue<SolrInputDocument> docQueue;
+    int batchSize;
+    List<SolrInputDocument> batch;
+
+    SolrIndexerThread(CloudSolrServer cloudSolrServer, LinkedBlockingQueue<SolrInputDocument> docQueue, int batchSize) {
+      this.cloudSolrServer = cloudSolrServer;
+      this.docQueue = docQueue;
+      this.batchSize = batchSize;
+      this.batch = new ArrayList<SolrInputDocument>(batchSize);
+    }
+
+    // polls a queue for docs to send ... if no more docs are seen within the poll timeout (100ms), then send what
+    // we have and then loop again
+    public void run() {
+      while (true) {
+        SolrInputDocument doc = null;
+        try {
+          doc = docQueue.poll(100, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {}
+
+        if (doc != null)
+          batch.add(doc);
+
+        // either we've reached the max doc size or there's no more docs
+        // in the queue so send what we have to Solr
+        int docsInBatch = batch.size();
+        if (docsInBatch >= batchSize || (doc == null && docsInBatch > 0)) {
+          try {
+            sendBatch(cloudSolrServer, batch, 2, 2);
+          } catch (Exception e) {
+            log.error("Failed to send batch containing "+docsInBatch+" docs to Solr due to: "+e);
+          }
+        }
+      }
+    }
   }
 
   static void displayOptions(PrintStream out) throws Exception {
