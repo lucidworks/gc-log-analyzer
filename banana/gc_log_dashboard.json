@@ -10,7 +10,7 @@
       ],
       "list": {
         "0": {
-          "query": "+type_s:gc",
+          "query": "+type_s:gc -gc_type_s:AppThreadsStopped +is_stop_the_world_b:true",
           "alias": "",
           "color": "#7EB26D",
           "id": 0,
@@ -23,39 +23,26 @@
       ]
     },
     "filter": {
-      "idQueue": [],
+      "idQueue": [
+        1,
+        2
+      ],
       "list": {
         "0": {
-          "from": "2015-03-08T07:00:00.000Z",
-          "to": "2015-03-09T06:00:00.000Z",
+          "from": "NOW/MINUTE-15MINUTE",
+          "to": "NOW/MINUTE%2B1MINUTE",
           "field": "timestamp_tdt",
           "type": "time",
+          "fromDateObj": "2015-03-11T20:39:53.730Z",
+          "toDateObj": "2015-03-11T20:54:53.730Z",
           "mandate": "must",
           "active": true,
           "alias": "",
           "id": 0
-        },
-        "1": {
-          "type": "querystring",
-          "query": "duration_secs_d:[0.1 TO *]",
-          "mandate": "must",
-          "active": true,
-          "alias": "",
-          "id": 1
-        },
-        "2": {
-          "type": "querystring",
-          "query": "-gc_event_type_s:AppThreadsStopped",
-          "mandate": "must",
-          "active": true,
-          "alias": "",
-          "id": 2
         }
       },
       "ids": [
-        0,
-        1,
-        2
+        0
       ]
     }
   },
@@ -74,7 +61,7 @@
           "type": "timepicker",
           "loadingEditor": false,
           "status": "Stable",
-          "mode": "absolute",
+          "mode": "relative",
           "time_options": [
             "5m",
             "15m",
@@ -88,21 +75,17 @@
             "1y",
             "5y"
           ],
-          "timespan": "7d",
+          "timespan": "15m",
           "timefield": "timestamp_tdt",
           "timeformat": "",
           "refresh": {
-            "enable": false,
-            "interval": 30,
+            "enable": true,
+            "interval": 15,
             "min": 3
           },
           "filter_id": 0,
           "spyable": true,
-          "title": "Time Window",
-          "time": {
-            "from": "03/08/2015 00:00:00",
-            "to": "03/09/2015 00:00:00"
-          }
+          "title": "Time Window"
         },
         {
           "error": false,
@@ -114,8 +97,13 @@
           "type": "query",
           "label": "Search",
           "history": [
-            "+type_s:gc",
-            "+type_s:gc -gc_event_type_s:AppThreadsStopped"
+            "+type_s:gc -gc_type_s:AppThreadsStopped +is_stop_the_world_b:true",
+            "+type_s:gc -gc_type_s:AppThreadsStopped",
+            "+type_s:gc -gc_type_s:AppThreadsStopped +duration_secs_d:[0.5 TO *]",
+            "+type_s:gc -gc_type_s:AppThreadsStopped +duration_secs_d:[1 TO *]",
+            "+type_s:gc -gc_type_s:stopped",
+            "+type_s:gc -gc_type_s:stopped  -gc_type_s:JVMOverHead",
+            "+type_s:gc -gc_type_s:JVMOverHead"
           ],
           "remember": 10,
           "pinned": true,
@@ -134,7 +122,7 @@
             "ids": [
               0
             ],
-            "query": "q=%2Btype_s%3Agc&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&wt=json&rows=0\n",
+            "query": "q=%2Btype_s%3Agc%20-gc_type_s%3AAppThreadsStopped%20%2Bis_stop_the_world_b%3Atrue&fq=timestamp_tdt:[NOW/MINUTE-15MINUTE%20TO%20NOW/MINUTE%2B1MINUTE]&wt=json&rows=0\n",
             "basic_query": "",
             "custom": ""
           },
@@ -180,7 +168,7 @@
       "collapsable": true,
       "panels": [
         {
-          "span": 12,
+          "span": 8,
           "editable": true,
           "type": "histogram",
           "loadingEditor": false,
@@ -191,7 +179,7 @@
             "ids": [
               0
             ],
-            "query": "q=%2Btype_s%3Agc&wt=json&rows=0&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&facet=true&facet.range=timestamp_tdt&facet.range.start=2015-03-08T07:00:00.000Z&facet.range.end=2015-03-09T06:00:00.000Z&facet.range.gap=%2B10MINUTE\n",
+            "query": "q=%2Btype_s%3Agc%20-gc_type_s%3AAppThreadsStopped%20%2Bis_stop_the_world_b%3Atrue&wt=json&rows=0&fq=timestamp_tdt:[NOW/MINUTE-15MINUTE%20TO%20NOW/MINUTE%2B1MINUTE]&facet=true&facet.range=timestamp_tdt&facet.range.start=NOW/MINUTE-15MINUTE&facet.range.end=NOW/MINUTE%2B1MINUTE&facet.range.gap=%2B10SECOND\n",
             "custom": ""
           },
           "max_rows": 100000,
@@ -199,7 +187,7 @@
           "group_field": null,
           "auto_int": true,
           "resolution": 100,
-          "interval": "10m",
+          "interval": "10s",
           "intervals": [
             "auto",
             "1s",
@@ -234,177 +222,36 @@
             "value_type": "cumulative",
             "query_as_alias": false
           },
-          "title": "Event Counts",
+          "title": "Stop the World GC Events per time period",
           "lines_smooth": false,
           "show_queries": true
-        }
-      ]
-    },
-    {
-      "title": "GC Activity",
-      "height": "150px",
-      "editable": true,
-      "collapse": false,
-      "collapsable": true,
-      "panels": [
+        },
         {
           "span": 4,
           "editable": true,
-          "type": "terms",
-          "loadingEditor": false,
-          "queries": {
-            "mode": "all",
-            "ids": [
-              0
-            ],
-            "query": "q=%2Btype_s%3Agc&wt=json&rows=0&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&facet=true&facet.field=gc_event_type_s&facet.limit=10&facet.missing=true",
-            "custom": "&fq=is_stop_the_world_b:true"
-          },
-          "mode": "count",
-          "field": "gc_event_type_s",
-          "stats_field": "",
-          "decimal_points": 0,
-          "exclude": [],
-          "missing": false,
-          "other": false,
-          "size": 10,
-          "order": "descending",
-          "style": {
-            "font-size": "10pt"
-          },
-          "donut": false,
-          "tilt": false,
-          "labels": true,
-          "logAxis": false,
-          "arrangement": "horizontal",
-          "chart": "pie",
-          "counter_pos": "above",
-          "lastColor": "",
-          "spyable": true,
-          "show_queries": true,
-          "chartColors": [
-            "#7EB26D",
-            "#EAB839",
-            "#6ED0E0",
-            "#EF843C",
-            "#E24D42",
-            "#1F78C1",
-            "#BA43A9",
-            "#705DA0",
-            "#508642",
-            "#CCA300",
-            "#447EBC",
-            "#C15C17",
-            "#890F02",
-            "#0A437C",
-            "#6D1F62",
-            "#584477",
-            "#B7DBAB",
-            "#F4D598",
-            "#70DBED",
-            "#F9BA8F",
-            "#F29191",
-            "#82B5D8",
-            "#E5A8E2",
-            "#AEA2E0",
-            "#629E51",
-            "#E5AC0E",
-            "#64B0C8",
-            "#E0752D",
-            "#BF1B00",
-            "#0A50A1",
-            "#962D82",
-            "#614D93",
-            "#9AC48A",
-            "#F2C96D",
-            "#65C5DB",
-            "#F9934E",
-            "#EA6460",
-            "#5195CE",
-            "#D683CE",
-            "#806EB7",
-            "#3F6833",
-            "#967302",
-            "#2F575E",
-            "#99440A",
-            "#58140C",
-            "#052B51",
-            "#511749",
-            "#3F2B5B",
-            "#E0F9D7",
-            "#FCEACA",
-            "#CFFAFF",
-            "#F9E2D2",
-            "#FCE2DE",
-            "#BADFF4",
-            "#F9D9F9",
-            "#DEDAF7"
-          ],
-          "title": "GC Event Types",
-          "useColorFromField": true
-        }
-      ]
-    },
-    {
-      "title": "Heap Usage",
-      "height": "250px",
-      "editable": true,
-      "collapse": false,
-      "collapsable": true,
-      "panels": [
-        {
-          "span": 6,
-          "editable": true,
           "type": "multiseries",
           "loadingEditor": false,
           "queries": {
             "mode": "all",
             "ids": [],
-            "query": "q=%2Btype_s%3Agc&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&fl=timestamp_tdt,tenured_size_kb_i,tenured_used_after_kb_i&wt=json&rows=1000&sort=timestamp_tdt asc",
-            "custom": "&fq=tenured_size_kb_i:[* TO *]&fq= type_s:gc"
-          },
-          "size": 1000,
-          "max_rows": 1000,
-          "field": "timestamp_tdt",
-          "yAxis": "",
-          "right_yAxis": "",
-          "fl": "tenured_size_kb_i,tenured_used_after_kb_i",
-          "right_fl": "",
-          "spyable": true,
-          "show_queries": true,
-          "interpolate": "linear",
-          "right_interpolate": "basis",
-          "rightYEnabled": false,
-          "showLegend": true,
-          "showRightLegend": true,
-          "title": "Tenured Space Usage"
-        },
-        {
-          "span": 6,
-          "editable": true,
-          "type": "multiseries",
-          "loadingEditor": false,
-          "queries": {
-            "mode": "all",
-            "ids": [],
-            "query": "q=%2Btype_s%3Agc&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&fl=timestamp_tdt,young_size_kb_i,young_used_after_kb_i&wt=json&rows=10000&sort=timestamp_tdt asc",
-            "custom": "&fq=young_size_kb_i:[* TO *]"
+            "query": "q=%2Btype_s%3Agc%20-gc_type_s%3AAppThreadsStopped%20%2Bis_stop_the_world_b%3Atrue&fq=timestamp_tdt:[NOW/MINUTE-15MINUTE%20TO%20NOW/MINUTE%2B1MINUTE]&fl=timestamp_tdt,tenured_used_pct_d,young_used_pct_d&wt=json&rows=10000&sort=timestamp_tdt asc",
+            "custom": "&fq= tenured_size_kb_i:[* TO *]"
           },
           "size": 1000,
           "max_rows": 10000,
           "field": "timestamp_tdt",
-          "yAxis": "",
+          "yAxis": "%",
           "right_yAxis": "",
-          "fl": "young_size_kb_i,young_used_after_kb_i",
+          "fl": "tenured_used_pct_d,young_used_pct_d",
           "right_fl": "",
           "spyable": true,
           "show_queries": true,
-          "interpolate": "linear",
+          "interpolate": "basis",
           "right_interpolate": "basis",
           "rightYEnabled": false,
           "showLegend": true,
           "showRightLegend": true,
-          "title": "Young Gen Space Usage"
+          "title": "Young / Old Usage"
         }
       ]
     },
@@ -426,15 +273,15 @@
             "ids": [
               0
             ],
-            "query": "q=%2Btype_s%3Agc&wt=json&rows=100000&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&fl=timestamp_tdt duration_secs_d&group=true&group.field=gc_type_s&group.limit=100000\n",
+            "query": "q=%2Btype_s%3Agc%20-gc_type_s%3AAppThreadsStopped%20%2Bis_stop_the_world_b%3Atrue&wt=json&rows=100000&fq=timestamp_tdt:[NOW/MINUTE-15MINUTE%20TO%20NOW/MINUTE%2B1MINUTE]&fl=timestamp_tdt duration_secs_d&group=true&group.field=gc_event_type_s&group.limit=100000\n",
             "custom": "&fq=is_stop_the_world_b:true&facet.mincount=1"
           },
           "max_rows": 100000,
           "value_field": "duration_secs_d",
-          "group_field": "gc_type_s",
+          "group_field": "gc_event_type_s",
           "auto_int": true,
           "resolution": 50,
-          "interval": "30m",
+          "interval": "30s",
           "intervals": [
             "auto",
             "1s",
@@ -493,9 +340,9 @@
             "ids": [
               0
             ],
-            "query": "q=%2Btype_s%3Agc&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&sort=timestamp_tdt asc&wt=json&rows=500",
-            "basic_query": "q=%2Btype_s%3Agc&fq=timestamp_tdt:[2015-03-08T07:00:00.000Z%20TO%202015-03-09T06:00:00.000Z]&fq=duration_secs_d:[0.1 TO *]&fq=-gc_event_type_s:AppThreadsStopped&sort=timestamp_tdt asc",
-            "custom": "&fq=-gc_event_type_s:AppThreadsStopped&fq=is_stop_the_world_b:true"
+            "query": "q=%2Btype_s%3Agc%20-gc_type_s%3AAppThreadsStopped%20%2Bis_stop_the_world_b%3Atrue&fq=timestamp_tdt:[NOW/MINUTE-15MINUTE%20TO%20NOW/MINUTE%2B1MINUTE]&sort=timestamp_tdt asc&wt=json&rows=500",
+            "basic_query": "q=%2Btype_s%3Agc%20-gc_type_s%3AAppThreadsStopped%20%2Bis_stop_the_world_b%3Atrue&fq=timestamp_tdt:[NOW/MINUTE-15MINUTE%20TO%20NOW/MINUTE%2B1MINUTE]&sort=timestamp_tdt asc",
+            "custom": "&fq=-gc_type_s:stopped&fq=is_stop_the_world_b:true"
           },
           "size": 100,
           "pages": 5,
@@ -513,10 +360,11 @@
             "timestamp_tdt",
             "host_port_s",
             "java_pid_i",
-            "gc_type_s",
             "duration_secs_d",
             "tenured_size_kb_i",
-            "tenured_used_pct_d"
+            "tenured_used_pct_d",
+            "gc_event_type_s",
+            "cause_s"
           ],
           "highlight": [],
           "sortable": true,
@@ -563,9 +411,12 @@
             "young_used_after_kb_i",
             "young_used_before_kb_i",
             "young_used_pct_d",
-            "young_used_reduced_d"
+            "young_used_reduced_d",
+            "gc_event_type_s",
+            "cause_s"
           ],
-          "show_queries": true
+          "show_queries": true,
+          "calcTopFieldValuesFromAllData": false
         }
       ]
     }
@@ -598,6 +449,7 @@
     "server": "/api/apollo/solr/",
     "core_name": "java_gc_logs",
     "core_list": [
+      "logs_mar10",
       "system_blobs",
       "andrew_feb26_signals",
       "java_gc_logs_signals",
@@ -615,7 +467,9 @@
       "system_banana",
       "java_gc_logs_logs",
       "logs_mar08",
-      "logs_feb26_signals"
+      "logs_mar09",
+      "logs_feb26_signals",
+      "tim_alias_test"
     ],
     "global_params": ""
   }
