@@ -55,20 +55,20 @@ public class GCLogAnalyzer {
       OptionBuilder
         .withArgName("HOST:PORT")
         .hasArg()
-        .isRequired(true)
-        .withDescription("Host and port of system that created the GC log(s) to parse.")
+        .isRequired(false)
+        .withDescription("Host and port of system that created the GC log(s) to parse")
         .create("javaHostAndPort"),
       OptionBuilder
         .withArgName("PID")
         .hasArg()
-        .isRequired(true)
+        .isRequired(false)
         .withDescription("Process ID of the JVM that created the GC log(s) to parse.")
         .create("javaPid"),
       OptionBuilder
         .withArgName("VERS")
         .hasArg()
-        .isRequired(true)
-        .withDescription("Version of the JVM that created the GC log(s) to parse.")
+        .isRequired(false)
+        .withDescription("Version of the JVM that created the GC log(s) to parse; default is 1.7")
         .create("javaVers"),
       OptionBuilder
         .withArgName("GC")
@@ -216,6 +216,8 @@ public class GCLogAnalyzer {
 
         if (cloudSolrServer != null)
           indexGCLog(cloudSolrServer, gcLog);
+        else
+          gcLog.printSummaryReport(System.out);
 
         gcLogs.add(gcLog);
       }
@@ -273,8 +275,8 @@ public class GCLogAnalyzer {
 
   public GCLog newGCLogInstance(CommandLine cli, String fileName, GCLog.GCEventListener eventListener) {
     String hostAndPort = cli.getOptionValue("javaHostAndPort");
-    int javaPid = Integer.parseInt(cli.getOptionValue("javaPid"));
-    String javaVers = cli.getOptionValue("javaVers");
+    Integer javaPid = cli.hasOption("javaPid") ? Integer.parseInt(cli.getOptionValue("javaPid")) : null;
+    String javaVers = cli.getOptionValue("javaVers", "1.7");
     String javaGC = cli.getOptionValue("javaGC", "CMS");
     return new GCLog(hostAndPort, javaPid, javaVers, javaGC, fileName, eventListener);
   }
@@ -328,12 +330,21 @@ public class GCLogAnalyzer {
     String docId = String.format("%s-%d-%d-%s",
       gcLog.getHostAndPort(), gcLog.getJavaPid(), event.timestamp.getTime(), event.type);
     doc.setField("id", docId);
-    doc.setField("host_port_s", gcLog.getHostAndPort());
-    doc.setField("java_pid_i", gcLog.getJavaPid());
+
+    // optional metadata about the JVM
+    if (gcLog.getHostAndPort() != null) {
+      doc.setField("host_port_s", gcLog.getHostAndPort());
+    }
+    if (gcLog.getJavaPid() != null) {
+      doc.setField("java_pid_i", gcLog.getJavaPid());
+    }
+    if (gcLog.getJavaVersion() != null) {
+      doc.setField("java_vers_s", gcLog.getJavaVersion());
+    }
+
     doc.setField("gc_log_file_s", gcLog.getFileName());
     doc.setField("timestamp_tdt", event.timestamp);
     doc.setField("type_s", "gc");
-    doc.setField("java_vers_s", gcLog.getJavaVersion());
     doc.setField("gc_type_s", gcLog.getJavaGarbageCollectorType());
     doc.setField("gc_event_type_s", event.type);
     doc.setField("gc_log_line_i", event.lineNum);

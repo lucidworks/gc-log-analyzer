@@ -70,7 +70,7 @@ public class GCLog {
   protected String javaVers;
   protected String javaGC;
   protected String hostAndPort;
-  protected int javaPid;
+  protected Integer javaPid;
   protected String fileName;
   protected int linesRead = 0;
   protected int parseErrors = 0;
@@ -82,11 +82,11 @@ public class GCLog {
 
   private boolean keepPolling = true;
 
-  public GCLog(String hostAndPort, int javaPid, String javaVers, String javaGC, String fileName) {
+  public GCLog(String hostAndPort, Integer javaPid, String javaVers, String javaGC, String fileName) {
     this(hostAndPort, javaPid, javaVers, javaGC, fileName, null);
   }
 
-  public GCLog(String hostAndPort, int javaPid, String javaVers, String javaGC, String fileName, GCEventListener eventListener) {
+  public GCLog(String hostAndPort, Integer javaPid, String javaVers, String javaGC, String fileName, GCEventListener eventListener) {
 
     if (javaVers == null || (!javaVers.startsWith("1.8") && !javaVers.startsWith("1.7")))
       throw new IllegalArgumentException("Java version '"+javaVers+
@@ -118,7 +118,7 @@ public class GCLog {
     return hostAndPort;
   }
 
-  public int getJavaPid() {
+  public Integer getJavaPid() {
     return javaPid;
   }
   
@@ -303,6 +303,10 @@ public class GCLog {
       line = line.trim();
       if (line.length() == 0)
         continue;
+
+      if (line.startsWith("CMS: Large ")) {
+        continue;
+      }
 
       // this is the most frequent message in the logs
       if (line.indexOf(STOPPED_MSG) != -1 && line.endsWith(" seconds")) {
@@ -965,7 +969,12 @@ public class GCLog {
       stats.durationSecs += event.durationSecs;
     }
 
-    out.println("Host: "+hostAndPort+", PID: "+javaPid+", File: "+fileName);
+    if (hostAndPort != null) {
+      out.println("Host: "+hostAndPort+", PID: "+javaPid+", File: "+fileName);
+    } else {
+      out.println("File: "+fileName);
+    }
+
     out.println("Parsed "+events.size()+" GC events from "+linesRead+" lines, parse errors="+parseErrors);
     out.println("Log Duration: "+getLogDurationSecs()+" secs");
     out.println("Application Threads Stopped Time (GC Overhead): "+getApplicationThreadsStoppedSecs()+" secs");
