@@ -30,7 +30,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
-import org.apache.solr.client.solrj.impl.CloudSolrServer;
+import org.apache.solr.client.solrj.impl.CloudSolrClient;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
@@ -149,29 +149,31 @@ public class GCLogAnalyzer {
     String zkHost = cli.getOptionValue("zkHost");
 
     List<GCLog> gcLogs = null;
-    CloudSolrServer cloudSolrServer = null;
+    CloudSolrClient cloudSolrClient = null;
     try {
       if (zkHost != null) {
         log.info("Connecting to SolrCloud cluster: " + zkHost);
-        cloudSolrServer = new CloudSolrServer(zkHost);
-        cloudSolrServer.setDefaultCollection(collection);
-        cloudSolrServer.connect();
+        cloudSolrClient = new CloudSolrClient(zkHost);
+        cloudSolrClient.setDefaultCollection(collection);
+        cloudSolrClient.connect();
       }
 
-      gcLogs = processGCLogs(cloudSolrServer, cli);
+      gcLogs = processGCLogs(cloudSolrClient, cli);
+      if (cloudSolrClient != null)
+        cloudSolrClient.commit(collection);
     } finally {
-      if (cloudSolrServer != null) {
+      if (cloudSolrClient != null) {
         try {
-          cloudSolrServer.shutdown();
+          cloudSolrClient.shutdown();
         } catch (Exception ignore) {}
-        log.info("Shutdown CloudSolrServer.");
+        log.info("Shutdown CloudSolrClient.");
       }
     }
     
     return gcLogs;
   }
 
-  public List<GCLog> processGCLogs(CloudSolrServer cloudSolrServer, CommandLine cli) throws Exception {
+  public List<GCLog> processGCLogs(CloudSolrClient cloudSolrClient, CommandLine cli) throws Exception {
 
     List<GCLog> gcLogs = new ArrayList<GCLog>();
     if (cli.hasOption("dir")) {
@@ -188,8 +190,8 @@ public class GCLogAnalyzer {
 
       for (File next : files) {
         GCLog gcLog = parseGCLogFile(cli, next);
-        if (cloudSolrServer != null)
-          indexGCLog(cloudSolrServer, gcLog);
+        if (cloudSolrClient != null)
+          indexGCLog(cloudSolrClient, gcLog);
 
         gcLogs.add(gcLog);
       }
@@ -201,7 +203,7 @@ public class GCLogAnalyzer {
 
       if (cli.hasOption("tail")) {
         // user has requested us to tail a GC log file
-        GCLogTailer tailerListener = new GCLogTailer(cloudSolrServer);
+        GCLogTailer tailerListener = new GCLogTailer(cloudSolrClient);
         GCLog gcLog = newGCLogInstance(cli, logFile.getName(), tailerListener);
         Tailer tailer = new Tailer(logFile, tailerListener, 1000);
         Thread thread = new Thread(tailer);
@@ -214,8 +216,8 @@ public class GCLogAnalyzer {
       } else {
         GCLog gcLog = parseGCLogFile(cli, logFile);
 
-        if (cloudSolrServer != null)
-          indexGCLog(cloudSolrServer, gcLog);
+        if (cloudSolrClient != null)
+          indexGCLog(cloudSolrClient, gcLog);
         else
           gcLog.printSummaryReport(System.out);
 
@@ -233,14 +235,14 @@ public class GCLogAnalyzer {
     LinkedBlockingQueue<String> queue;
     LinkedBlockingQueue<SolrInputDocument> docQueue;
 
-    GCLogTailer(CloudSolrServer cloudSolrServer) {
+    GCLogTailer(CloudSolrClient cloudSolrClient) {
       super();
 
       this.queue = new LinkedBlockingQueue<String>(1000);
       this.docQueue = new LinkedBlockingQueue<SolrInputDocument>(1000);
 
-      if (cloudSolrServer != null) {
-        indexerThread = new SolrIndexerThread(cloudSolrServer, docQueue, 20);
+      if (cloudSolrClient != null) {
+        indexerThread = new SolrIndexerThread(cloudSolrClient, docQueue, 20);
         indexerThread.start();
       }
     }
@@ -311,17 +313,17 @@ public class GCLogAnalyzer {
     return gcLog;
   }
 
-  public void indexGCLog(CloudSolrServer cloudSolrServer, GCLog gcLog) throws Exception {
+  public void indexGCLog(CloudSolrClient cloudSolrClient, GCLog gcLog) throws Exception {
     List<GCLog.GCEvent> events = gcLog.getEvents();
     int batchSize = 200;
     List<SolrInputDocument> batch = new ArrayList<SolrInputDocument>(batchSize);
     for (GCLog.GCEvent next : events) {
       batch.add(toDoc(gcLog, next));
       if (batch.size() >= batchSize)
-        sendBatch(cloudSolrServer, batch, 2, 2);
+        sendBatch(cloudSolrClient, batch, 2, 2);
     }
     if (!batch.isEmpty())
-      sendBatch(cloudSolrServer, batch, 2, 2);
+      sendBatch(cloudSolrClient, batch, 2, 2);
   }
 
   protected SolrInputDocument toDoc(GCLog gcLog, GCLog.GCEvent event) throws Exception {
@@ -388,7 +390,7 @@ public class GCLogAnalyzer {
     doc.setField(space.name+"_used_reduced_d", space.getReductionPct());
   }
 
-  protected int sendBatch(CloudSolrServer cloudSolrServer, List<SolrInputDocument> batch, int waitBeforeRetry, int maxRetries) throws Exception {
+  protected int sendBatch(CloudSolrClient cloudSolrClient, List<SolrInputDocument> batch, int waitBeforeRetry, int maxRetries) throws Exception {
     int sent = 0;
     long startMs = System.currentTimeMillis();
     try {
@@ -399,7 +401,7 @@ public class GCLogAnalyzer {
         updateRequest.setParams(params);
       }
       updateRequest.add(batch);
-      cloudSolrServer.request(updateRequest);
+      cloudSolrClient.request(updateRequest);
       sent = batch.size();
 
       long tookMs = System.currentTimeMillis() - startMs;
@@ -418,7 +420,7 @@ public class GCLogAnalyzer {
         if (--maxRetries > 0) {
           log.warn("ERROR: " + rootCause + " ... Sleeping for " + waitBeforeRetry + " seconds before re-try ...");
           Thread.sleep(waitBeforeRetry * 1000L);
-          sent = sendBatch(cloudSolrServer, batch, waitBeforeRetry, maxRetries);
+          sent = sendBatch(cloudSolrClient, batch, waitBeforeRetry, maxRetries);
         } else {
           log.error("No more retries available! Add batch failed due to: " + rootCause);
           throw exc;
@@ -433,13 +435,13 @@ public class GCLogAnalyzer {
 
   class SolrIndexerThread extends Thread {
 
-    CloudSolrServer cloudSolrServer;
+    CloudSolrClient cloudSolrClient;
     LinkedBlockingQueue<SolrInputDocument> docQueue;
     int batchSize;
     List<SolrInputDocument> batch;
 
-    SolrIndexerThread(CloudSolrServer cloudSolrServer, LinkedBlockingQueue<SolrInputDocument> docQueue, int batchSize) {
-      this.cloudSolrServer = cloudSolrServer;
+    SolrIndexerThread(CloudSolrClient cloudSolrClient, LinkedBlockingQueue<SolrInputDocument> docQueue, int batchSize) {
+      this.cloudSolrClient = cloudSolrClient;
       this.docQueue = docQueue;
       this.batchSize = batchSize;
       this.batch = new ArrayList<SolrInputDocument>(batchSize);
@@ -462,7 +464,7 @@ public class GCLogAnalyzer {
         int docsInBatch = batch.size();
         if (docsInBatch >= batchSize || (doc == null && docsInBatch > 0)) {
           try {
-            sendBatch(cloudSolrServer, batch, 2, 2);
+            sendBatch(cloudSolrClient, batch, 2, 2);
           } catch (Exception e) {
             log.error("Failed to send batch containing "+docsInBatch+" docs to Solr due to: "+e);
           }

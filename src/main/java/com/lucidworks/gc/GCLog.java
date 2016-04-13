@@ -523,20 +523,26 @@ public class GCLog {
       event = parseGCEvent(timestamp, cmsPhaseType, block, blockStartLine);
 
       // bug checking!!!
-      if (event == null)
-        throw new IllegalStateException(
-          "NULL event from file "+fileName+" at line "+lineNum+"! type is null! block:\n"+block2str(block));
+      if (event == null) {
+        //throw new IllegalStateException(
+        log.error(
+          "NULL event from file " + fileName + " at line " + lineNum + "! type is null! block:\n" + block2str(block));
+        return;
+      }
 
       if (event.type == null)
-        throw new IllegalStateException(event+
+        //throw new IllegalStateException(event+
+        log.error(
           " is invalid from file "+fileName+" at line "+lineNum+"! type is null! block:\n"+block2str(block));
 
       if (event.timestamp == null)
-        throw new IllegalStateException(event+
+        //throw new IllegalStateException(event+
+        log.error(
           " is invalid from file "+fileName+" at line "+lineNum+"! timestamp is null! block:\n"+block2str(block));
 
       if (event.durationSecs == -1d)
-        throw new IllegalStateException(event+
+        //throw new IllegalStateException(event+
+        log.error(
           " is invalid from file "+fileName+" at line "+lineNum+"! durationSecs is -1! block:\n"+block2str(block));
 
       // yay! the event is good
@@ -656,9 +662,11 @@ public class GCLog {
       if (gcEventAtLine == -1)
         gcEventAtLine = parseGCEvent(event, ": [Full GC", lineNum, eventLines);
 
-      if (gcEventAtLine == -1)
-        throw new UnsupportedGCEventException("Block starting at line "+
-          lineNum+" doesn't appear to be a GC event:\n"+block2str(eventLines), eventLines, lineNum, 0);
+      if (gcEventAtLine == -1) {
+        log.error("Block starting at line " +
+          lineNum + " doesn't appear to be a GC event:\n" + block2str(eventLines));
+        return null;
+      }
 
       // now scan for the event type
       for (int n=gcEventAtLine; n < numLines; n++) {
@@ -681,8 +689,9 @@ public class GCLog {
     }
 
     if (eventTypeAtLine == -1) {
-      throw new UnsupportedGCEventException("Couldn't parse event type from block starting at line "+
-        lineNum+":\n"+block2str(eventLines), eventLines, lineNum, 0);
+      log.error("Couldn't parse event type from block starting at line "+
+        lineNum+":\n"+block2str(eventLines));
+      return null;
     }
 
     // scan for the event invocation count
